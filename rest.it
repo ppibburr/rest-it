@@ -1,0 +1,99 @@
+#!/usr/bin/env ruby
+
+require 'json'
+
+class Device
+  @store = {}
+  class << self
+    def store
+      @store
+    end
+    
+    def get name
+      store[name.to_sym]
+    end
+  end
+
+  def initialize *o
+   
+  end
+  
+  def result *o
+    {status: :ok}.to_json
+  end
+  
+  def self.create name, *o
+    Device.store[name.to_sym] = new(*o)
+  end
+end
+
+class ADBDevice < Device
+  attr_reader :ip
+  def initialize ip
+    @ip = ip
+  end
+  
+  def connect
+    `adb connect #{ip}`
+  end
+  
+  def execute what, *params
+     result(`adb -s #{ip} shell #{what} #{params.join(" ")}`)
+  end
+  
+  def result body
+  end
+  
+  def key code
+    execute :input, :keyevent, code
+  end
+end
+
+class Android < ADBDevice
+  def sleep
+    execute :input, :keyevent, 26
+  end
+  
+  def wake
+    execute :input, :keyevent, 26
+  end
+  
+  def home
+    key 3
+  end
+  
+  def volume direction, step=nil
+    code = ({up: 24, down: 25, mute: 91})[direction.to_sym]
+    
+    return unless code
+    
+    key code 
+  end
+  
+  def media action
+    code=({
+      pause:    85, #-->  "KEYCODE_MEDIA_PLAY_PAUSE"
+      stop:     86, #-->  "KEYCODE_MEDIA_STOP"
+      next:     87, #-->  "KEYCODE_MEDIA_NEXT"
+      previous: 88, #-->  "KEYCODE_MEDIA_PREVIOUS"
+      rewind:   89, #-->  "KEYCODE_MEDIA_REWIND"
+      forward:  90, #-->  "KEYCODE_MEDIA_FAST_FORWARD"  
+    })[action.to_sym]
+    
+    return unless code
+    
+    key code
+  end
+end
+
+require 'sinatra'
+
+Android.create :fire_tv, '192.168.1.110'
+
+get "/:device/:method/*" do |*args|
+  Device.get(params[:device]).send params[:method], *args[2..-1]
+end
+
+get "/:device/:method" do
+  Device.get(params[:device]).send params[:method]
+end
